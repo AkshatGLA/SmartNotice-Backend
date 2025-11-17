@@ -1,0 +1,16 @@
+Flask
+flask-cors
+python-dotenv
+mongoengine
+pymongo
+pandas
+Werkzeug
+PyJWT
+bcrypt
+email-validator
+flask-socketio
+python-socketio
+python-engineio
+simple-websocket
+eventlet
+dnspython
