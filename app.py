@@ -183,7 +183,13 @@ if __name__ == "__main__":
     print(f"🚀 Starting Flask-SocketIO server on port {PORT}...")
     print(f"📡 SocketIO CORS enabled for all origins")
     print(f"🔗 WebSocket server will be available at: http://localhost:{PORT}")
-    socketio.run(app, debug=True, port=PORT, host='0.0.0.0', use_reloader=False)  # ✅ Run with socketio
+    socketio.run(app,
+             debug=False,
+             port=PORT,
+             host='0.0.0.0',
+             use_reloader=False,
+             allow_unsafe_werkzeug=True)
+
 
 
 
