@@ -167,7 +167,6 @@ def get_notices(current_user):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
 @notice_bp.route("", methods=["POST"])
 @token_required
 def create_notice(current_user):
@@ -189,10 +188,10 @@ def create_notice(current_user):
                     attachment_paths.append(file_path)
                     attachment_filenames.append(filename)
 
-        # Get form data - ADDED: Priority field
+        # Get form data
         requires_approval = form_data.get('requires_approval', 'false').lower() == 'true'
         status = form_data.get('status', 'draft')
-        priority = form_data.get('priority', 'Normal')  # ADDED: Priority field
+        priority = form_data.get('priority', 'Normal')
         
         # Determine status based on approval requirement
         if status == 'published' and requires_approval:
@@ -203,7 +202,7 @@ def create_notice(current_user):
         else:
             approval_status = 'not_required'
 
-        # Create notice with all fields - ADDED: Priority field
+        # Create notice with all fields
         notice = Notice(
             title=form_data.get('title'),
             subject=form_data.get('subject', ''),
@@ -214,7 +213,7 @@ def create_notice(current_user):
             year=form_data.get('year', ''),
             section=form_data.get('section', ''),
             recipient_emails=json.loads(form_data.get('recipient_emails', '[]')),
-            priority=priority,  # ADDED: Priority field
+            priority=priority,
             send_options=json.loads(form_data.get('send_options', '{"email": false, "web": true}')),
             status=status,
             approval_status=approval_status,
@@ -239,6 +238,8 @@ def create_notice(current_user):
                     approved_by_name=current_user.name,
                     approved_at=datetime.datetime.utcnow()
                 )
+                # If auto-approved because no approvers exist, update status for email check below
+                status = "published" 
             else:
                 approval_ids = []
                 for approver in approvers:
@@ -257,7 +258,24 @@ def create_notice(current_user):
                     set__approval_status="pending"
                 )
 
-        # Clean up attachments
+        # --- EMAIL SENDING LOGIC ADDED HERE ---
+        # Only send if status is published (not pending approval) and email option is checked
+        if status == 'published' and notice.send_options.get('email') and notice.recipient_emails:
+            try:
+                # Calls the utility function provided. 
+                # Note: We do not pass attachment_paths because your provided email_send_function.py 
+                # does not accept an 'attachments' argument.
+                send_bulk_email(
+                    recipient_emails=notice.recipient_emails,
+                    subject=notice.subject or notice.title,
+                    body=notice.content
+                )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send email on notice creation: {str(e)}")
+        # -------------------------------------
+
+        # Clean up attachments from local server storage
+        # (Files are typically uploaded to cloud or kept; this logic deletes them after processing)
         for path in attachment_paths:
             if os.path.exists(path):
                 try:
@@ -274,7 +292,7 @@ def create_notice(current_user):
             "created_by": current_user.name,
             "created_at": notice.created_at.isoformat(),
             "notice_type": notice.notice_type,
-            "priority": notice.priority  # ADDED: Priority field
+            "priority": notice.priority
         }
         emit_notice_update('created', notice_data)
         
@@ -284,7 +302,7 @@ def create_notice(current_user):
             "requiresApproval": requires_approval,
             "status": status,
             "approvalStatus": approval_status,
-            "priority": priority  # ADDED: Priority field
+            "priority": priority
         }
         
         return jsonify(response_data), 201

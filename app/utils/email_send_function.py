@@ -7,7 +7,7 @@ import os # Import os to get credentials from environment variables
 # --- CONFIGURATION ---
 # It's better to load sensitive data from environment variables
 EMAIL_SENDER_ADDRESS = os.environ.get("EMAIL_SENDER_ADDRESS", "team.smart.notice@gmail.com")
-EMAIL_SENDER_PASSWORD = os.environ.get("EMAIL_SENDER_PASSWORD", "sqbpaqxlstzrxabk") # Your App Password
+EMAIL_SENDER_PASSWORD = os.environ.get("EMAIL_SENDER_PASSWORD", "ragfnyoxtqjexopp") # Your App Password
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
