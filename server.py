@@ -33,7 +33,7 @@ def create_app():
     # CORS setup
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5173", "*"],  # React frontend port
+            "origins": ["http://localhost:5173", "*","https://smartnoticesystem.duckdns.org"],  # React frontend port
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Authorization", "Content-Type"],
             "supports_credentials": True
