@@ -2,7 +2,7 @@ name: Deploy SmartNotice Backend
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
@@ -10,28 +10,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Copy backend files to VPS
+      # 2. Upload only necessary files (EXCLUDES .env and venv)
+      - name: Upload backend to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          source: "."
-          target: "/root/SmartNotice-Backend"
+          overwrite: true
+          strip_components: 1
+          source: |
+            app/
+            server.py
+            config.py
+            requirements.txt
+          target: /root/SmartNotice-Backend
 
-      - name: Run deployment commands
+      # 3. SSH into VPS and deploy
+      - name: Run deployment commands on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            echo "🚀 Starting Deployment on VPS..."
+
             cd /root/SmartNotice-Backend
-            source /root/venv/bin/activate
+
+            # Activate venv
+            source /root/venv/bin/activate || source venv/bin/activate
+
+            echo "📦 Installing Python dependencies..."
             pip install -r requirements.txt
+
+            echo "🔁 Restarting SmartNotice service..."
             systemctl daemon-reload
             systemctl restart smartnotice
+
+            echo "✔ Checking SmartNotice status..."
             systemctl status smartnotice --no-pager
+
+            echo "🎉 Deployment completed successfully!"
