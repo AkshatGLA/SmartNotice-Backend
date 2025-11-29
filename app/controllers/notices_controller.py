@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import traceback
+import threading # ✅ ADDED: Threading import
 from werkzeug.utils import secure_filename
 from ..models.notice_model import Notice
 from ..models.user_model import User
@@ -20,6 +21,21 @@ notice_bp = Blueprint('notices', __name__, url_prefix='/api/notices')
 
 UPLOAD_FOLDER = 'uploads'
 
+# ✅ ADDED: Background Email Helper
+def send_email_background(recipient_emails, subject, body):
+    """
+    Sends email in a background thread so it doesn't block the API response.
+    """
+    try:
+        print(f"📧 Background: Sending email to {len(recipient_emails)} recipients...")
+        # Note: Attachments are currently not passed as your util function doesn't support them
+        success = send_bulk_email(recipient_emails, subject, body)
+        if success:
+            print("✅ Background: Email sent successfully!")
+        else:
+            print("❌ Background: Email failed to send.")
+    except Exception as e:
+        print(f"❌ Background: Error sending email: {str(e)}")
 
 
 def emit_notice_read(read_data):
@@ -46,8 +62,8 @@ def emit_notice_update(event_type, notice_data):
         current_app.logger.error(f"Error emitting notice_update: {str(e)}")
         traceback.print_exc()
 
-def emit_notice_read(notice_id, user_id, read_count):
-    """Emit notice read updates to all connected clients"""
+def emit_notice_read_v2(notice_id, user_id, read_count):
+    """Emit notice read updates to all connected clients (v2 wrapper)"""
     try:
         if socketio and hasattr(socketio, 'emit'):
             socketio.emit('notice_read_update', {
@@ -143,7 +159,7 @@ def get_notices(current_user):
                 "specialization": notice.specialization,
                 "year": notice.year,
                 "section": notice.section,
-                "priority": notice.priority,  # ADDED: Priority field
+                "priority": notice.priority,
                 "status": notice.status,
                 "from_field": notice.from_field,
                 "publish_at": notice.publish_at.isoformat() if notice.publish_at else None,
@@ -258,20 +274,13 @@ def create_notice(current_user):
                     set__approval_status="pending"
                 )
 
-        # --- EMAIL SENDING LOGIC ADDED HERE ---
-        # Only send if status is published (not pending approval) and email option is checked
+        # --- EMAIL SENDING LOGIC (THREADED) ---
+        # ✅ FIX: Use threading to prevent timeout on deployed server
         if status == 'published' and notice.send_options.get('email') and notice.recipient_emails:
-            try:
-                # Calls the utility function provided. 
-                # Note: We do not pass attachment_paths because your provided email_send_function.py 
-                # does not accept an 'attachments' argument.
-                send_bulk_email(
-                    recipient_emails=notice.recipient_emails,
-                    subject=notice.subject or notice.title,
-                    body=notice.content
-                )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send email on notice creation: {str(e)}")
+            threading.Thread(
+                target=send_email_background,
+                args=(notice.recipient_emails, notice.subject or notice.title, notice.content)
+            ).start()
         # -------------------------------------
 
         # Clean up attachments from local server storage
@@ -468,14 +477,12 @@ def update_notice(current_user, notice_id):
         notice.updated_at = datetime.datetime.now()
         notice.save()
         
-        # Send email if the notice is published and has recipients
+        # ✅ FIX: Threaded Email for Updates too
         if notice.status == 'published' and notice.send_options.get('email') and notice.recipient_emails:
-            send_bulk_email(
-                recipient_emails=notice.recipient_emails,
-                subject=notice.subject or notice.title,
-                body=notice.content,
-                attachments=attachment_paths
-            )
+             threading.Thread(
+                target=send_email_background,
+                args=(notice.recipient_emails, notice.subject or notice.title, notice.content)
+            ).start()
         
         # Emit real-time update
         notice_data = {
@@ -575,7 +582,7 @@ def mark_notice_read(current_user, notice_id):
             notice.save()
             
             # EMIT SOCKET EVENT FOR READ UPDATE - FIXED CALL
-            emit_notice_read(notice.id, user_id, updated_read_count)
+            emit_notice_read_v2(notice.id, user_id, updated_read_count)
             
             return jsonify({
                 "message": f"Read count updated to {updated_read_count}",
@@ -601,7 +608,7 @@ def mark_notice_read(current_user, notice_id):
             )
             
             # EMIT SOCKET EVENT FOR NEW READ - FIXED CALL
-            emit_notice_read(notice.id, user_id, 1)
+            emit_notice_read_v2(notice.id, user_id, 1)
             
             return jsonify({
                 "message": "First read recorded",
