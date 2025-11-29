@@ -1,39 +1,35 @@
 # -------------------------------------------------------------------------
 # CRITICAL: Monkey patch must happen BEFORE importing other libraries
-# This allows the async server (Eventlet) to handle standard IO correctly.
 # -------------------------------------------------------------------------
 import eventlet
 eventlet.monkey_patch()
 
 from flask import Flask
 from flask_cors import CORS
-from flask_socketio import SocketIO
-from app.extensions import socketio
 import os
 from dotenv import load_dotenv
 from mongoengine import connect
 from pymongo.errors import ConnectionFailure
+from app.extensions import socketio
 
 # Load environment variables
 load_dotenv()
 PORT = int(os.environ.get('PORT', 5001))
 
-# ✅ SocketIO initialized globally
-# We REMOVED async_mode='threading'. Let it use 'eventlet' automatically.
-socketio = SocketIO(
-    cors_allowed_origins="*",
-    logger=True,            
-    engineio_logger=True    
-)
-
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')
 
-    # CORS setup
+    # ✅ CORS FIX
+    # 1. Removed "*" (It breaks requests when supports_credentials=True)
+    # 2. Added your deployed domain explicitely
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5173", "*","https://smartnoticesystem.duckdns.org"],  # React frontend port
+            "origins": [
+                "http://localhost:5173", 
+                "https://smartnoticesystem.duckdns.org",
+                "https://akshat.devai.in"
+            ],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Authorization", "Content-Type"],
             "supports_credentials": True
@@ -83,23 +79,16 @@ def create_app():
     def hello():
         return "WELCOME TO SMART NOTICE BACKEND"
 
-    # ✅ Attach SocketIO to Flask
     socketio.init_app(app)
 
     return app
 
-# Create the app instance
 app = create_app()
 
 if __name__ == "__main__":
     print(f"🚀 Starting Flask-SocketIO server on port {PORT}...")
-    print(f"📡 SocketIO CORS enabled for all origins")
-    print(f"🔗 WebSocket server will be available at: http://localhost:{PORT}")
-    
-    # Run using socketio.run
-    # We remove 'allow_unsafe_werkzeug' because we are now properly using Eventlet
     socketio.run(app,
-             debug=True,       # Debug is fine if use_reloader is False
+             debug=True,       
              port=PORT,
              host='0.0.0.0',
-             use_reloader=False) # Reloader often breaks async loops
+             use_reloader=False)
